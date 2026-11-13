@@ -11,7 +11,7 @@ services:
       ingress:
         gw_priority: 1
       traefik_network_1:
-      # traefik_network_2:
+      traefik_network_2:
       traefik_idp:
       auth:
         # oauth2-proxy reaches Pocket ID through Traefik under its public hostname, so auth needs no outbound access
@@ -148,9 +148,9 @@ networks:
   traefik_network_1:
     name: traefik_network_1
     external: true
-  # traefik_network_2:
-  #   name: traefik_network_2
-  #   external: true
+  traefik_network_2:
+    name: traefik_network_2
+    external: true
   # IPv6 here lets IPv6 clients reach Traefik with their own address instead of docker-proxy's IPv4 one
   ingress:
     enable_ipv6: true
