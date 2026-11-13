@@ -28,5 +28,5 @@ create_network() {
 # アプリごとのネットワーク。アプリを追加するときは、.envとcompose.yamlと合わせてここにも追加する
 TRAEFIK_NETWORK_1_CIDR=$(read_cidr TRAEFIK_NETWORK_1_CIDR) || exit 1
 create_network traefik_network_1 --subnet="${TRAEFIK_NETWORK_1_CIDR}"
-TRAEFIK_NETWORK_2_CIDR=$(read_cidr TRAEFIK_NETWORK_2_CIDR) || exit 1
-create_network traefik_network_2 --subnet="${TRAEFIK_NETWORK_2_CIDR}"
+# TRAEFIK_NETWORK_2_CIDR=$(read_cidr TRAEFIK_NETWORK_2_CIDR) || exit 1
+# create_network traefik_network_2 --subnet="${TRAEFIK_NETWORK_2_CIDR}"
