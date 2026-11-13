@@ -32,7 +32,7 @@ services:
     depends_on:
       - docker-socket-proxy
   pocket-id:
-    image: ghcr.io/pocket-id/pocket-id:v2.19.1
+    image: ghcr.io/pocket-id/pocket-id:v2.19.2
     restart: unless-stopped
     # only Traefik shares this network, so no other container can reach Pocket ID directly or impersonate the proxy
     networks:
