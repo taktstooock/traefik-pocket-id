@@ -1,0 +1,163 @@
+services:
+  traefik:
+    image: traefik:v3.7.16
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+      - 127.0.0.1:8443:8443
+    networks:
+      # the gateway network, which the published ports go through
+      ingress:
+        gw_priority: 1
+      traefik_network_1:
+      # traefik_network_2:
+      traefik_idp:
+      auth:
+        # oauth2-proxy reaches Pocket ID through Traefik under its public hostname, so auth needs no outbound access
+        aliases:
+          - ${POCKET_ID_HOST:?POCKET_ID_HOST is not set}
+      socket_proxy:
+    environment:
+      TZ: Asia/Tokyo
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.dashboard.entrypoints=internal"
+      - "traefik.http.routers.dashboard.service=api@internal"
+    volumes:
+      - ./config:/etc/traefik:ro
+      - ${PATH_LOGS_DIR:-/var/log/traefik}:/logs
+      - traefik_letsencrypt:/letsencrypt
+    depends_on:
+      - docker-socket-proxy
+  pocket-id:
+    image: ghcr.io/pocket-id/pocket-id:v2.19.1
+    restart: unless-stopped
+    # only Traefik shares this network, so no other container can reach Pocket ID directly or impersonate the proxy
+    networks:
+      - traefik_idp
+    expose:
+      - 1411
+    environment:
+      TZ: Asia/Tokyo
+      # passkeys are bound to this domain, so changing the host later invalidates every registered passkey
+      APP_URL: https://${POCKET_ID_HOST:?POCKET_ID_HOST is not set}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is not set}
+      # traefik_idp is shared only with Traefik, so every peer that can connect is the proxy
+      TRUST_PROXY: "true"
+      LOG_JSON: "true"
+      ANALYTICS_DISABLED: "true"
+      # application configuration is managed here instead of the admin UI, so it can be reviewed
+      UI_CONFIG_DISABLED: "true"
+      ALLOW_USER_SIGNUPS: disabled
+      # apps identify users by email, so only administrators set it and it is trusted as verified
+      ALLOW_OWN_ACCOUNT_EDIT: "false"
+      EMAILS_VERIFIED: "true"
+      ALLOW_INSECURE_CALLBACK_URLS: "false"
+      WEBAUTHN_USER_VERIFICATION: required
+      WEBAUTHN_ALLOW_SYNCED_PASSKEYS: "true"
+      EMAIL_ONE_TIME_ACCESS_AS_UNAUTHENTICATED_ENABLED: "false"
+      EMAIL_LOGIN_NOTIFICATION_ENABLED: "true"
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is not set}
+      SMTP_PORT: ${SMTP_PORT:?SMTP_PORT is not set}
+      SMTP_TLS: ${SMTP_TLS:?SMTP_TLS is not set}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is not set}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is not set}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is not set}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_idp"
+      - "traefik.http.routers.pocket-id.rule=Host(`${POCKET_ID_HOST}`)"
+    volumes:
+      - pocket_id_data:/app/data
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
+    restart: unless-stopped
+    # auth is shared only with Traefik, so no app can reach the proxy or forge the X-Forwarded-* headers it trusts
+    networks:
+      - auth
+    expose:
+      - 4180
+    environment:
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      # trusts X-Forwarded-* from any peer, which on auth can only be Traefik
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_REAL_CLIENT_IP_HEADER: X-Forwarded-For
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: https://${POCKET_ID_HOST}
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID:?OAUTH2_PROXY_CLIENT_ID is not set}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET:?OAUTH2_PROXY_CLIENT_SECRET is not set}
+      OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256
+      OAUTH2_PROXY_INSECURE_OIDC_SKIP_NONCE: "false"
+      OAUTH2_PROXY_SCOPE: openid email groups
+      # reserved on every host by the oauth2-proxy router in config/dynamic/default.yml
+      OAUTH2_PROXY_PROXY_PREFIX: /_oauth2
+      # sign-ups are disabled and only administrators create users in Pocket ID, so the domain is not restricted again here
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET:?OAUTH2_PROXY_COOKIE_SECRET is not set}
+      # host-only and HttpOnly, so another app on the same parent domain never receives or overwrites the session;
+      # the callback URL is likewise derived from each request's host
+      OAUTH2_PROXY_COOKIE_NAME: __Host-Http-oauth2_proxy
+      OAUTH2_PROXY_COOKIE_SAMESITE: lax
+      # limits the rd parameter after login, so the proxy cannot be used as an open redirect
+      OAUTH2_PROXY_WHITELIST_DOMAINS: ${OAUTH2_PROXY_WHITELIST_DOMAINS:?OAUTH2_PROXY_WHITELIST_DOMAINS is not set}
+      # forwardAuth only needs the status code, so nothing is proxied after authentication
+      OAUTH2_PROXY_UPSTREAMS: static://202
+      # hides the version shown in the footer of the error page
+      OAUTH2_PROXY_FOOTER: "-"
+      # Pocket ID is the only provider, so the sign-in page would only add a click
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      # one CSRF cookie per login attempt, so logins started in several tabs do not cancel each other;
+      # the limit keeps those cookies from growing the request headers without bound
+      OAUTH2_PROXY_COOKIE_CSRF_PER_REQUEST: "true"
+      OAUTH2_PROXY_COOKIE_CSRF_PER_REQUEST_LIMIT: "5"
+      # no refresh, so a user removed in Pocket ID loses access within this period at the latest
+      OAUTH2_PROXY_COOKIE_EXPIRE: 72h
+      # keeps no tokens in the cookie; nothing reads them, and refresh is off
+      OAUTH2_PROXY_SESSION_COOKIE_MINIMAL: "true"
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    networks:
+      - socket_proxy
+    # read-only (POST stays off); EVENTS, PING and VERSION are on by default and Traefik needs them too
+    environment:
+      CONTAINERS: 1
+    volumes:
+      - ${PATH_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+
+volumes:
+  traefik_letsencrypt:
+    name: traefik_letsencrypt
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VOLUME_TRAEFIK_LETSENCRYPT_PATH:-/mnt/data/volumes/traefik_letsencrypt}
+  pocket_id_data:
+    name: pocket_id_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VOLUME_POCKET_ID_DATA_PATH:-/mnt/data/volumes/pocket_id_data}
+
+networks:
+  # one per app, so a compromised app cannot reach another app without going through Traefik (README)
+  traefik_network_1:
+    name: traefik_network_1
+    external: true
+  # traefik_network_2:
+  #   name: traefik_network_2
+  #   external: true
+  # IPv6 here lets IPv6 clients reach Traefik with their own address instead of docker-proxy's IPv4 one
+  ingress:
+    enable_ipv6: true
+  socket_proxy:
+    internal: true
+  # not internal, because Pocket ID sends mail over SMTP; name is fixed because the pocket-id traefik.docker.network label refers to it
+  traefik_idp:
+    name: traefik_idp
+  auth:
+    internal: true

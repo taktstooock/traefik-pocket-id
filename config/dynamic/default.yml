@@ -1,0 +1,72 @@
+http:
+  routers:
+    # reserved on every host, so apps never need routing of their own to reach oauth2-proxy
+    oauth2-proxy:
+      # matches OAUTH2_PROXY_PROXY_PREFIX in compose.yaml
+      rule: "PathPrefix(`/_oauth2/`)"
+      # above any app router on the same host, whose priority defaults to its rule length
+      priority: 10000
+      service: oauth2-proxy@file
+  services:
+    oauth2-proxy:
+      loadBalancer:
+        servers:
+          - url: "http://oauth2-proxy:4180"
+  middlewares:
+    default-chain:
+      chain:
+        middlewares:
+          - smart-compress@file
+          - secure-headers@file
+          - health-check@file
+    ip-private:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+          - "172.16.0.0/12"
+    basic-admins:
+      basicAuth:
+        usersFile: /etc/traefik/dynamic/.basic-admins
+    smart-compress:
+      compress:
+        excludedContentTypes:
+          - "image/jpeg"
+          - "image/png"
+          - "image/webp"
+          - "video/mp4"
+          - "video/webm"
+          - "application/zip"
+          - "application/pdf"
+          - "application/vnd.android.package-archive"
+    secure-headers:
+      headers:
+        # HTTP Strict Transport Security (HSTS) settings
+        stsSeconds: 2592000 # 30 days
+        # Allow only same-origin framing to prevent clickjacking
+        customFrameOptionsValue: "SAMEORIGIN"
+        # MIME sniffing protection
+        contentTypeNosniff: true
+        # Referrer Policy
+        referrerPolicy: "strict-origin-when-cross-origin"
+        # Browser feature restrictions
+        browserXssFilter: true
+    health-check:
+      circuitBreaker:
+        expression: "NetworkErrorRatio() > 0.2"
+        checkPeriod: 5s
+    # allowed_groups names the group in Pocket ID (README)
+    oidc-admin:
+      forwardAuth:
+        address: "http://oauth2-proxy:4180/?allowed_groups=admin"
+        # drops every X-Forwarded-* the client sent; oauth2-proxy trusts these from Traefik
+        trustForwardHeader: false
+        # the redirect or error page is a few KB; Traefik buffers the whole response
+        maxResponseBodySize: 1048576
+
+tls:
+  options:
+    default: # Default TLS options for all entry points
+      minVersion: VersionTLS12
+      sniStrict: true
+    localhost:
+      sniStrict: false

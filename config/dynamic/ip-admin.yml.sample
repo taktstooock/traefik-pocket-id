@@ -1,0 +1,8 @@
+http:
+  middlewares:
+    ip-admin:
+      ipAllowList:
+        sourceRange:
+          # List of administrators IP addresses below
+          # Example: "192.168.1.100/32", "2001:db8::1/128"
+          - "127.0.0.1/32"

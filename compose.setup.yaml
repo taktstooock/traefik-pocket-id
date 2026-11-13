@@ -1,0 +1,5 @@
+# Until the first administrator is registered, whoever opens /setup becomes one, so the whole host is limited to ip-admin
+services:
+  pocket-id:
+    labels:
+      - "traefik.http.routers.pocket-id.middlewares=ip-admin@file"

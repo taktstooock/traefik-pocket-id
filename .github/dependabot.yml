@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      timezone: "Asia/Tokyo"
+    commit-message:
+      prefix: "chore"
+    ignore:
+      # a major upgrade changes the static/dynamic configuration format and needs the migration guide applied, so it is done by hand
+      - dependency-name: "traefik"
+        update-types: ["version-update:semver-major"]

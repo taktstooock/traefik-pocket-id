@@ -1,0 +1,55 @@
+entryPoints:
+  web:
+    address: :80
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    asDefault: true
+    address: :443
+    http:
+      tls:
+        certResolver: webresolver
+      middlewares:
+        - default-chain@file
+  internal:
+    address: :8443
+    http:
+      tls:
+        options: localhost@file
+      middlewares:
+        - ip-private@file
+        - basic-admins@file
+
+api:
+  insecure: false
+  dashboard: true
+
+providers:
+  docker:
+    endpoint: "tcp://docker-socket-proxy:2375"
+    exposedByDefault: false
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+certificatesResolvers:
+  webresolver:
+    acme:
+      storage: /letsencrypt/acme.json
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      caServer: https://acme-v02.api.letsencrypt.org/directory
+      httpChallenge:
+        entryPoint: web
+
+log:
+  filePath: "/logs/traefik.log"
+  format: json
+  level: INFO
+
+accessLog:
+  filePath: "/logs/access.log"
+  format: json
