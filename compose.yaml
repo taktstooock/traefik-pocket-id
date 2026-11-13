@@ -58,13 +58,7 @@ services:
       WEBAUTHN_USER_VERIFICATION: required
       WEBAUTHN_ALLOW_SYNCED_PASSKEYS: "true"
       EMAIL_ONE_TIME_ACCESS_AS_UNAUTHENTICATED_ENABLED: "false"
-      EMAIL_LOGIN_NOTIFICATION_ENABLED: "true"
-      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is not set}
-      SMTP_PORT: ${SMTP_PORT:?SMTP_PORT is not set}
-      SMTP_TLS: ${SMTP_TLS:?SMTP_TLS is not set}
-      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is not set}
-      SMTP_USER: ${SMTP_USER:?SMTP_USER is not set}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is not set}
+      EMAIL_LOGIN_NOTIFICATION_ENABLED: "false"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_idp"
@@ -156,7 +150,7 @@ networks:
     enable_ipv6: true
   socket_proxy:
     internal: true
-  # not internal, because Pocket ID sends mail over SMTP; name is fixed because the pocket-id traefik.docker.network label refers to it
+  # name is fixed because the pocket-id traefik.docker.network label refers to it
   traefik_idp:
     name: traefik_idp
   auth:
