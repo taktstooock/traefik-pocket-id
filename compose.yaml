@@ -153,5 +153,6 @@ networks:
   # name is fixed because the pocket-id traefik.docker.network label refers to it
   traefik_idp:
     name: traefik_idp
+    internal: true
   auth:
     internal: true
